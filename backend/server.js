@@ -123,6 +123,11 @@ app.delete('/articles/:id', requireAuth, (req, res) => {
     articles = articles.filter(a => a.id !== id);
     res.status(204).send(); 
 });
+// GET : Récupérer uniquement les articles de l'utilisateur connecté
+app.get('/my-articles', requireAuth, (req, res) => {
+    const userArticles = articles.filter(a => a.author === req.user.email);
+    res.json(userArticles);
+});
 
 // --- DÉMARRAGE DU SERVEUR ---
 app.listen(Port, () => {
