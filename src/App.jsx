@@ -22,12 +22,14 @@ function App() {
         <Routes>
           {/* Routes Publiques */}
           <Route path="/" element={<Home />} />
-          <Route path="/article/:id" element={<ArticleDetail />} />          <Route path="/login" element={<Login />} />
+          <Route path="/article/:id" element={<ArticleDetail />} />        
+            <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
 
           
-          <Route path="/create" element={<CreateArticle />} />
-          <Route path="/edit/:id" element={<ProtectedRoute><EditArticle /></ProtectedRoute>} />          <Route path="/my-articles" element={<ProtectedRoute><MyArticles /></ProtectedRoute>} />
+         
+          <Route path="/edit/:id" element={<ProtectedRoute><EditArticle /></ProtectedRoute>} />         
+           <Route path="/my-articles" element={<ProtectedRoute><MyArticles /></ProtectedRoute>} />
 
           {/* Route 404 - Pour toutes les URL inconnues */}
           <Route path="*" element={<NotFound />} />

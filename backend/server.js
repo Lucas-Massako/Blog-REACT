@@ -10,46 +10,8 @@ app.use(express.json());
 const Port = 3002;
 const JWT_SECRET = process.env.JWT_SECRET;
 
-// --- 1. AUTHENTIFICATION ---
-const users = []; 
-(async () => {
-    const hashedPassword = await bcrypt.hash('password123', 10);
-    users.push({ id: 1, email: 'admin@example.com', password: hashedPassword });
-})();
-
-function requireAuth(req, res, next) {
-    const authHeader = req.headers['authorization'];
-    if (!authHeader) {
-        return res.status(401).json({ message: 'Token manquant' });
-    }
-    const token = authHeader.split(' ')[1];
-   
-    try {
-        const decoded = jwt.verify(token, JWT_SECRET);
-        req.user = decoded;
-        next();
-    } catch (error) {
-        return res.status(401).json({ message: 'Token invalide' });
-    }
-}
-
-app.post('/login', async (req, res) => {
-    const { email, password } = req.body;
-    const user = users.find(u => u.email === email);
-    if (!user) {
-        return res.status(401).json({ message: 'Utilisateur non trouvé' });
-    }
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-        return res.status(401).json({ message: 'Mot de passe incorrect' });
-    }
-    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '1h' });
-    res.json({ token });
-});
-
-// --- 2. GESTION DES ARTICLES ---
-
-// Voici la liste qui manquait !
+// --- 1. BASE DE DONNÉES TEMPORAIRE ---
+let users = []; 
 let articles = [
     { 
         id: 1, 
@@ -60,76 +22,84 @@ let articles = [
     }
 ];
 
-// GET : Récupérer TOUS les articles (Route Publique)
-app.get('/articles', (req, res) => {
-    res.json(articles);
+// Création d'un compte admin au démarrage
+(async () => {
+    const hashedPassword = await bcrypt.hash('password123', 10);
+    users.push({ id: 1, email: 'admin@example.com', password: hashedPassword });
+})();
+
+// Middleware de protection des routes
+function requireAuth(req, res, next) {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader) return res.status(401).json({ message: 'Token manquant' });
+    const token = authHeader.split(' ')[1];
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        req.user = decoded;
+        next();
+    } catch (error) {
+        return res.status(401).json({ message: 'Token invalide' });
+    }
+}
+
+// --- 2. ROUTES D'AUTHENTIFICATION ---
+
+// Inscription
+app.post('/register', async (req, res) => {
+    const { email, password } = req.body;
+    if (users.find(u => u.email === email)) {
+        return res.status(400).json({ message: "Cet email est déjà utilisé" });
+    }
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newUser = { id: Date.now(), email, password: hashedPassword };
+    users.push(newUser);
+    res.status(201).json({ message: "Compte créé" });
 });
 
-// POST : Créer un nouvel article (Route Privée)
+// Connexion
+app.post('/login', async (req, res) => {
+    const { email, password } = req.body;
+    const user = users.find(u => u.email === email);
+    if (!user || !(await bcrypt.compare(password, user.password))) {
+        return res.status(401).json({ message: 'Identifiants incorrects' });
+    }
+    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '1h' });
+    res.json({ token });
+});
+
+// --- 3. ROUTES DES ARTICLES ---
+
+app.get('/articles', (req, res) => res.json(articles));
+
+app.get('/articles/:id', (req, res) => {
+    const article = articles.find(a => a.id === parseInt(req.params.id));
+    article ? res.json(article) : res.status(404).send();
+});
+
 app.post('/articles', requireAuth, (req, res) => {
-    const newArticle = {
-        id: Date.now(),
-        title: req.body.title,
-        content: req.body.content,
-        author: req.user.email,
-        date: new Date().toLocaleDateString()
-    };
+    const newArticle = { id: Date.now(), ...req.body, author: req.user.email, date: new Date().toLocaleDateString() };
     articles.push(newArticle);
     res.status(201).json(newArticle);
 });
 
-// GET : Récupérer UN SEUL article par son ID (Route Publique)
-app.get('/articles/:id', (req, res) => {
-    const id = parseInt(req.params.id);
-    const article = articles.find(a => a.id === id);
-    
-    if (article) {
-        res.json(article);
-    } else {
-        res.status(404).json({ message: "Article non trouvé" });
-    }
+app.get('/my-articles', requireAuth, (req, res) => {
+    res.json(articles.filter(a => a.author === req.user.email));
 });
 
-// PUT : Modifier un article (Route Privée + Vérification de l'auteur)
 app.put('/articles/:id', requireAuth, (req, res) => {
-    const id = parseInt(req.params.id);
-    const index = articles.findIndex(a => a.id === id);
-    
-    if (index === -1) {
-        return res.status(404).json({ message: "Article non trouvé" });
-    }
-
-    if (articles[index].author !== req.user.email) {
-        return res.status(403).json({ message: "Non autorisé : vous n'êtes pas l'auteur" });
-    }
-
-    articles[index] = { ...articles[index], title: req.body.title, content: req.body.content };
+    const index = articles.findIndex(a => a.id === parseInt(req.params.id));
+    if (index === -1) return res.status(404).send();
+    if (articles[index].author !== req.user.email) return res.status(403).send();
+    articles[index] = { ...articles[index], ...req.body };
     res.json(articles[index]);
 });
 
-// DELETE : Supprimer un article (Route Privée + Vérification de l'auteur)
 app.delete('/articles/:id', requireAuth, (req, res) => {
-    const id = parseInt(req.params.id);
-    const article = articles.find(a => a.id === id);
-
-    if (!article) {
-        return res.status(404).json({ message: "Article non trouvé" });
-    }
-
-    if (article.author !== req.user.email) {
-        return res.status(403).json({ message: "Non autorisé : vous n'êtes pas l'auteur" });
-    }
-
-    articles = articles.filter(a => a.id !== id);
-    res.status(204).send(); 
-});
-// GET : Récupérer uniquement les articles de l'utilisateur connecté
-app.get('/my-articles', requireAuth, (req, res) => {
-    const userArticles = articles.filter(a => a.author === req.user.email);
-    res.json(userArticles);
+    const article = articles.find(a => a.id === parseInt(req.params.id));
+    if (!article) return res.status(404).send();
+    if (article.author !== req.user.email) return res.status(403).send();
+    articles = articles.filter(a => a.id !== article.id);
+    res.status(204).send();
 });
 
-// --- DÉMARRAGE DU SERVEUR ---
-app.listen(Port, () => {
-    console.log(`Serveur démarré sur le port ${Port}`);
-});
+app.listen(Port, () => console.log(`Serveur démarré sur le port ${Port}`));
