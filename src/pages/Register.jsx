@@ -1,3 +1,3 @@
 export default function Register() {
-  return <h1>Page d'enregistrement</h1>;
+  return <h1>Page d'Inscription</h1>;
 }
