@@ -1,6 +1,7 @@
 import { Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
+import Footer from './components/Footer';
 
 // Importation de toutes les pages de ton architecture
 import Home from './pages/Home';
@@ -36,6 +37,7 @@ function App() {
           <Route path="/create" element={<ProtectedRoute>  <CreateArticle /> </ProtectedRoute> } />
         </Routes>
       </main>
+      <Footer />
     </div>
   );
 }
